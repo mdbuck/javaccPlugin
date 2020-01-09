@@ -52,4 +52,10 @@ public class JavaccPluginTest {
 
         assertNotNull(javaccDependencyConfiguration);
     }
+
+    @Test
+    public void foo() {
+        final Object sourceSets = project.getProperties().get("sourceSets");
+        System.out.println("sourceSets = " + sourceSets);
+    }
 }

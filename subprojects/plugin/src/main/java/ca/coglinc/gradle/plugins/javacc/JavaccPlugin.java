@@ -1,15 +1,18 @@
 package ca.coglinc.gradle.plugins.javacc;
 
+import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Callable;
 
 import org.gradle.api.Action;
+import org.gradle.api.plugins.JavaPlugin;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.Task;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.DependencySet;
+import org.gradle.api.tasks.SourceSetContainer;
 
 public class JavaccPlugin implements Plugin<Project> {
     public static final String GROUP = "JavaCC";
@@ -20,10 +23,22 @@ public class JavaccPlugin implements Plugin<Project> {
         configureDefaultJavaccDependency(project, configuration);
 
         addCompileJavaccTaskToProject(project, configuration);
-        addCompileJJTreeTaskToProject(project, configuration);
-        addCompileJjdocTaskToProject(project, configuration);
 
         configureTaskDependencies(project);
+    }
+
+    private void addSourceToIdes(final Project project, final AbstractJavaccTask task) {
+        // Make the proto source dirs known to IDEs
+        project.getPlugins().withType(JavaPlugin.class, new Action<JavaPlugin>() {
+            @Override
+            public void execute(JavaPlugin javaPlugin) {
+                SourceSetContainer sourceSetContainer = (SourceSetContainer) project.getProperties().get("sourceSets");
+                final File inputDirectory = task.getInputDirectory();
+                sourceSetContainer.getByName("main").getAllJava().srcDir(inputDirectory);
+                final File outputDirectory = task.getOutputDirectory();
+                sourceSetContainer.getByName("main").getAllJava().srcDir(outputDirectory);
+            }
+        });
     }
 
     private Configuration createJavaccConfiguration(Project project) {
@@ -44,29 +59,23 @@ public class JavaccPlugin implements Plugin<Project> {
     }
 
     private void addCompileJavaccTaskToProject(Project project, Configuration configuration) {
-        addTaskToProject(project, CompileJavaccTask.class, CompileJavaccTask.TASK_NAME_VALUE, CompileJavaccTask.TASK_DESCRIPTION_VALUE,
+        final CompileJavaccTask compileJavaccTask = addTaskToProject(project, CompileJavaccTask.class, CompileJavaccTask.TASK_NAME_VALUE, CompileJavaccTask.TASK_DESCRIPTION_VALUE,
             JavaccPlugin.GROUP, configuration);
+        addSourceToIdes(project, compileJavaccTask);
     }
 
-    private void addCompileJJTreeTaskToProject(Project project, Configuration configuration) {
-        addTaskToProject(project, CompileJjtreeTask.class, CompileJjtreeTask.TASK_NAME_VALUE, CompileJjtreeTask.TASK_DESCRIPTION_VALUE,
-            JavaccPlugin.GROUP, configuration);
-    }
-
-    private void addCompileJjdocTaskToProject(Project project, Configuration configuration) {
-        addTaskToProject(project, CompileJjdocTask.class, CompileJjdocTask.TASK_NAME_VALUE, CompileJjdocTask.TASK_DESCRIPTION_VALUE,
-            JavaccPlugin.GROUP, configuration);
-    }
-
-    private void addTaskToProject(Project project, Class<? extends AbstractJavaccTask> type, String name, String description, String group, final Configuration configuration) {
+    private <T extends AbstractJavaccTask> T addTaskToProject(Project project, Class<T> type, String name, String description, String group, final Configuration configuration) {
         Map<String, Object> options = new HashMap<String, Object>(3);
 
         options.put(Task.TASK_TYPE, type);
         options.put(Task.TASK_DESCRIPTION, description);
         options.put(Task.TASK_GROUP, group);
 
-        AbstractJavaccTask task = (AbstractJavaccTask) project.task(options, name);
-        task.getConventionMapping().map("classpath", returning(configuration));
+        final Task task = project.task(options, name);
+        final T abstractJavaccTask = type.cast(task);
+        abstractJavaccTask.getConventionMapping().map("classpath", returning(configuration));
+
+        return abstractJavaccTask;
     }
 
     private void configureTaskDependencies(Project project) {
